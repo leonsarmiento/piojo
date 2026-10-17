@@ -75,12 +75,33 @@ def load_layer(path: str):
     with open(DATA_DIR / f"{path}.geojson", "r", encoding="utf-8") as f:
         return json.load(f)
 
+def _bbox(gj: dict):
+    """Devuelve [[lat_min, lon_min], [lat_max, lon_max]] de un GeoJSON."""
+    minx = miny = float("inf")
+    maxx = maxy = float("-inf")
+
+    def walk(coords):
+        nonlocal minx, miny, maxx, maxy
+        if isinstance(coords[0], (int, float)):
+            minx, maxx = min(minx, coords[0]), max(maxx, coords[0])
+            miny, maxy = min(miny, coords[1]), max(maxy, coords[1])
+        else:
+            for c in coords:
+                walk(c)
+
+    for feat in gj["features"]:
+        walk(feat["geometry"]["coordinates"])
+    return [[miny, minx], [maxy, maxx]]
+
 def build_map(active_ids: tuple, basemap: str):
     gdf_map = folium.Map(
-        location=[4.14, -76.30],  # centro aproximado de Piojó
+        location=[4.14, -76.30],  # centro aproximado de Piojó (respaldo)
         zoom_start=13,
         tiles=None,
     )
+
+    # ---------- Centrar en el límite municipal ----------
+    gdf_map.fit_bounds(_bbox(load_layer("Limite_Piojo")))
 
     # ---------- Fondo ----------
     if basemap == "OpenStreetMap":
@@ -132,7 +153,7 @@ with st.sidebar:
     basemap = st.radio(
         "Selecciona el fondo",
         ["OpenStreetMap", "Google Satellite Hybrid"],
-        index=0,
+        index=1,
     )
 
     st.subheader("📚 Capas")
