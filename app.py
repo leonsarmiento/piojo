@@ -110,13 +110,27 @@ def build_map(active_ids: tuple, basemap: str):
             attr="© OpenStreetMap contributors",
             name="OpenStreetMap",
         ).add_to(gdf_map)
-    else:  # Google Satellite Hybrid
-        folium.TileLayer(
-            tiles="https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-            attr="© Google",
-            name="Google Satellite Hybrid",
-            max_zoom=20,
-        ).add_to(gdf_map)
+    else:  # Bing Satellite
+        # plugin leaflet.bing (requerido para el esquema quadkey de Bing)
+        gdf_map.get_root().html.add_child(
+            folium.Element(
+                '<script src="https://cdn.jsdelivr.net/npm/leaflet.bing@1.3.2/src/leaflet.bing.js"></script>'
+            )
+        )
+        gdf_map.get_root().html.add_child(
+            folium.Element(
+                f"""
+                <script>
+                var bingSat = L.tileLayer.bing('Satellite', {{
+                    name: 'Bing Satellite',
+                    attribution: '© Microsoft Bing',
+                    maxZoom: 20
+                }});
+                bingSat.addTo(map_{gdf_map._id});
+                </script>
+                """
+            )
+        )
 
     # ---------- Capas vectoriales ----------
     for lyr in LAYERS:
@@ -143,7 +157,7 @@ def build_map(active_ids: tuple, basemap: str):
 st.title("🗺️ PIOJÓ — Mapa Web de Áreas de Vida")
 st.caption(
     "Municipio de Piojó, Valle del Cauca, Colombia · "
-    "Capas vectoriales sobre fondo OpenStreetMap o Google Satellite Hybrid"
+    "Capas vectoriales sobre fondo OpenStreetMap o Bing Satellite"
 )
 
 with st.sidebar:
@@ -152,7 +166,7 @@ with st.sidebar:
     st.subheader("🗺️ Fondo del mapa")
     basemap = st.radio(
         "Selecciona el fondo",
-        ["OpenStreetMap", "Google Satellite Hybrid"],
+        ["OpenStreetMap", "Bing Satellite"],
         index=1,
     )
 
