@@ -110,27 +110,41 @@ def build_map(active_ids: tuple, basemap: str):
             attr="© OpenStreetMap contributors",
             name="OpenStreetMap",
         ).add_to(gdf_map)
-    else:  # Bing Satellite
-        # plugin leaflet.bing (requerido para el esquema quadkey de Bing)
-        gdf_map.get_root().html.add_child(
-            folium.Element(
-                '<script src="https://cdn.jsdelivr.net/npm/leaflet.bing@1.3.2/src/leaflet.bing.js"></script>'
-            )
-        )
-        gdf_map.get_root().html.add_child(
-            folium.Element(
-                f"""
-                <script>
-                var bingSat = L.tileLayer.bing('Satellite', {{
-                    name: 'Bing Satellite',
-                    attribution: '© Microsoft Bing',
-                    maxZoom: 20
+    else:  # Bing Satellite (sin API key, endpoint público ecn.tiles.virtualearth.net)
+        bing_js = f"""
+        <script>
+        L.TileLayer.BingSat = L.TileLayer.extend({{
+            _getQuadKey: function (tilePoint) {{
+                var qk = '';
+                for (var s = this._getZoomForUrl(); s > 0; s--) {{
+                    var mask = 1 << (s - 1);
+                    var bit = 0;
+                    if ((tilePoint.x & mask) !== 0) bit |= 1;
+                    if ((tilePoint.y & mask) !== 0) bit |= 2;
+                    qk += bit;
+                }}
+                return qk;
+            }},
+            getTileUrl: function (tilePoint) {{
+                var sub = (tilePoint.x + tilePoint.y) % 4;
+                return L.Util.template(this._url, {{
+                    s: sub,
+                    quadkey: this._getQuadKey(tilePoint)
                 }});
-                bingSat.addTo(map_{gdf_map._id});
-                </script>
-                """
-            )
-        )
+            }}
+        }});
+        var bingSat = new L.TileLayer.BingSat(
+            'https://ecn.t{{s}}.tiles.virtualearth.net/tiles/a{{quadkey}}.jpeg?g=284',
+            {{
+                name: 'Bing Satellite',
+                attribution: '© Microsoft Bing',
+                maxZoom: 20
+            }}
+        );
+        bingSat.addTo(map_{gdf_map._id});
+        </script>
+        """
+        gdf_map.get_root().html.add_child(folium.Element(bing_js))
 
     # ---------- Capas vectoriales ----------
     for lyr in LAYERS:
