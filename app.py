@@ -92,7 +92,7 @@ def _bbox(gj: dict):
         walk(feat["geometry"]["coordinates"])
     return [[miny, minx], [maxy, maxx]]
 
-def build_map(active_ids: tuple, basemap: str, bing_key: str = ""):
+def build_map(active_ids: tuple, basemap: str):
     gdf_map = folium.Map(
         location=[4.14, -76.30],  # centro aproximado de Piojó (respaldo)
         zoom_start=13,
@@ -109,39 +109,13 @@ def build_map(active_ids: tuple, basemap: str, bing_key: str = ""):
             attr="© OpenStreetMap contributors",
             name="OpenStreetMap",
         ).add_to(gdf_map)
-    else:
-        # --- Bing Satellite (requerida API key gratuita de Bing Maps) ---
-        if bing_key:
-            gdf_map.get_root().html.add_child(
-                folium.Element(
-                    '<script src="https://cdn.jsdelivr.net/npm/leaflet-bing-layer@3.3.1/leaflet-bing-layer.min.js"></script>'
-                )
-            )
-            gdf_map.get_root().html.add_child(
-                folium.Element(
-                    f"""
-                    <script>
-                    var bingSat = L.tileLayer.bing({{
-                        bingMapsKey: '{bing_key}',
-                        imagerySet: 'AerialWithLabels',
-                        culture: 'es_ES',
-                        name: 'Bing Satellite Hybrid',
-                        attribution: '© Microsoft Bing',
-                        maxZoom: 20
-                    }});
-                    bingSat.addTo(map_{gdf_map._id});
-                    </script>
-                    """
-                )
-            )
-        # --- Esri World Imagery (sin API key) ---
-        else:
-            folium.TileLayer(
-                tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                attr="© Esri, Maxar, Earthstar Geographics",
-                name="Esri World Imagery",
-                max_zoom=19,
-            ).add_to(gdf_map)
+    else:  # Esri World Imagery (sin API key)
+        folium.TileLayer(
+            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            attr="© Esri, Maxar, Earthstar Geographics",
+            name="Esri World Imagery",
+            max_zoom=19,
+        ).add_to(gdf_map)
 
     # ---------- Capas vectoriales ----------
     for lyr in LAYERS:
@@ -159,13 +133,51 @@ def build_map(active_ids: tuple, basemap: str, bing_key: str = ""):
             },
         ).add_to(gdf_map)
 
+    # ---------- Conservar zoom/centro al re-renderizar (localStorage) ----------
+    gdf_map.get_root().html.add_child(
+        folium.Element(
+            f"""
+            <script>
+            (function () {{
+                var KEY = 'piojo_map_view';
+                function init() {{
+                    var mapObj = window['map_{gdf_map._id}'];
+                    if (!mapObj) return;
+                    try {{
+                        var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+                        if (saved && saved.lat != null) {{
+                            mapObj.setView([saved.lat, saved.lng], saved.zoom);
+                        }}
+                    }} catch (e) {{}}
+                    var save = function () {{
+                        try {{
+                            var c = mapObj.getCenter();
+                            localStorage.setItem(KEY, JSON.stringify({{
+                                lat: c.lat, lng: c.lng, zoom: mapObj.getZoom()
+                            }}));
+                        }} catch (e) {{}}
+                    }};
+                    mapObj.on('moveend', save);
+                    mapObj.on('zoomend', save);
+                }}
+                if (document.readyState === 'loading') {{
+                    document.addEventListener('DOMContentLoaded', init);
+                }} else {{
+                    init();
+                }}
+            }})();
+            </script>
+            """
+        )
+    )
+
     return gdf_map
 
 # ------------------------- UI -------------------------
 st.title("🗺️ PIOJÓ — Mapa Web de Áreas de Vida")
 st.caption(
     "Municipio de Piojó, Valle del Cauca, Colombia · "
-    "Capas vectoriales sobre fondo OpenStreetMap, Bing Satellite Hybrid o Esri World Imagery"
+    "Capas vectoriales sobre fondo OpenStreetMap o Esri World Imagery"
 )
 
 with st.sidebar:
@@ -174,21 +186,9 @@ with st.sidebar:
     st.subheader("🗺️ Fondo del mapa")
     basemap = st.radio(
         "Selecciona el fondo",
-        ["OpenStreetMap", "Bing Satellite Hybrid", "Esri World Imagery"],
+        ["OpenStreetMap", "Esri World Imagery"],
         index=1,
     )
-
-    bing_key = ""
-    if basemap == "Bing Satellite Hybrid":
-        bing_key = st.text_input(
-            "Bing Maps API key",
-            value="",
-            help=(
-                "Gratuita: crea una clave en "
-                "[bingmapscreator.com](https://www.bingmapscreator.com) "
-                "(500 peticiones/mes gratis). Sin clave se usa Esri World Imagery."
-            ),
-        ).strip()
 
     st.subheader("📚 Capas")
     st.caption("Activa o desactiva las capas (todas con 50 % de opacidad)")
@@ -218,11 +218,7 @@ st.info(
 )
 
 if active_ids:
-    # Si elige Bing sin clave, usar Esri (la satélite que funciona sin key)
-    effective_basemap = basemap
-    if basemap == "Bing Satellite Hybrid" and not bing_key:
-        effective_basemap = "Esri World Imagery"
-    m = build_map(active_ids, effective_basemap, bing_key)
+    m = build_map(active_ids, basemap)
     st_html(m._repr_html_(), height=750)
 else:
     st.warning("⚠️ Activa al menos una capa en el panel lateral para ver el mapa.")

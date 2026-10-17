@@ -17,7 +17,7 @@ streamlit run app.py
 
 ## Características
 - 6 capas vectoriales, cada una con un color propio y 50 % de opacidad
-- Fondos: OpenStreetMap, Bing Satellite Hybrid y Esri World Imagery
+- Fondos: OpenStreetMap y Esri World Imagery
 - Panel lateral para activar/desactivar capas y leyenda de colores
 
 ## Despliegue en Streamlit Community Cloud
