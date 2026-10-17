@@ -148,9 +148,6 @@ def build_map(active_ids: tuple, basemap: str):
             },
         ).add_to(gdf_map)
 
-    # Control de capas (derecha)
-    folium.LayerControl(collapsed=False).add_to(gdf_map)
-
     return gdf_map
 
 # ------------------------- UI -------------------------
@@ -193,8 +190,7 @@ with st.sidebar:
 active_ids = tuple(k for k, v in active.items() if v)
 
 st.info(
-    "💡 Haz clic en las polígonos para ver sus atributos y usa el panel "
-    "a la derecha para alternar capas.",
+    "💡 Haz clic en los polígonos para ver sus atributos.",
     icon="💡",
 )
 
