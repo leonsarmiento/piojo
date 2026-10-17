@@ -93,7 +93,7 @@ def _bbox(gj: dict):
         walk(feat["geometry"]["coordinates"])
     return [[miny, minx], [maxy, maxx]]
 
-def build_map(active_ids: tuple, basemap: str):
+def build_map(active_ids: tuple, basemap: str, bing_key: str = ""):
     gdf_map = folium.Map(
         location=[4.14, -76.30],  # centro aproximado de Piojó (respaldo)
         zoom_start=13,
@@ -110,41 +110,39 @@ def build_map(active_ids: tuple, basemap: str):
             attr="© OpenStreetMap contributors",
             name="OpenStreetMap",
         ).add_to(gdf_map)
-    else:  # Bing Satellite (sin API key, endpoint público ecn.tiles.virtualearth.net)
-        bing_js = f"""
-        <script>
-        L.TileLayer.BingSat = L.TileLayer.extend({{
-            _getQuadKey: function (tilePoint) {{
-                var qk = '';
-                for (var s = this._getZoomForUrl(); s > 0; s--) {{
-                    var mask = 1 << (s - 1);
-                    var bit = 0;
-                    if ((tilePoint.x & mask) !== 0) bit |= 1;
-                    if ((tilePoint.y & mask) !== 0) bit |= 2;
-                    qk += bit;
-                }}
-                return qk;
-            }},
-            getTileUrl: function (tilePoint) {{
-                var sub = (tilePoint.x + tilePoint.y) % 4;
-                return L.Util.template(this._url, {{
-                    s: sub,
-                    quadkey: this._getQuadKey(tilePoint)
-                }});
-            }}
-        }});
-        var bingSat = new L.TileLayer.BingSat(
-            'https://ecn.t{{s}}.tiles.virtualearth.net/tiles/a{{quadkey}}.jpeg?g=284',
-            {{
-                name: 'Bing Satellite',
-                attribution: '© Microsoft Bing',
-                maxZoom: 20
-            }}
-        );
-        bingSat.addTo(map_{gdf_map._id});
-        </script>
-        """
-        gdf_map.get_root().html.add_child(folium.Element(bing_js))
+    else:
+        # --- Bing Satellite (requerida API key gratuita de Bing Maps) ---
+        if bing_key:
+            gdf_map.get_root().html.add_child(
+                folium.Element(
+                    '<script src="https://cdn.jsdelivr.net/npm/leaflet-bing-layer@3.3.1/leaflet-bing-layer.min.js"></script>'
+                )
+            )
+            gdf_map.get_root().html.add_child(
+                folium.Element(
+                    f"""
+                    <script>
+                    var bingSat = L.tileLayer.bing({{
+                        bingMapsKey: '{bing_key}',
+                        imagerySet: 'AerialWithLabels',
+                        culture: 'es_ES',
+                        name: 'Bing Satellite Hybrid',
+                        attribution: '© Microsoft Bing',
+                        maxZoom: 20
+                    }});
+                    bingSat.addTo(map_{gdf_map._id});
+                    </script>
+                    """
+                )
+            )
+        # --- Esri World Imagery (sin API key) ---
+        else:
+            folium.TileLayer(
+                tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                attr="© Esri, Maxar, Earthstar Geographics",
+                name="Esri World Imagery",
+                max_zoom=19,
+            ).add_to(gdf_map)
 
     # ---------- Capas vectoriales ----------
     for lyr in LAYERS:
@@ -168,7 +166,7 @@ def build_map(active_ids: tuple, basemap: str):
 st.title("🗺️ PIOJÓ — Mapa Web de Áreas de Vida")
 st.caption(
     "Municipio de Piojó, Valle del Cauca, Colombia · "
-    "Capas vectoriales sobre fondo OpenStreetMap o Bing Satellite"
+    "Capas vectoriales sobre fondo OpenStreetMap, Bing Satellite Hybrid o Esri World Imagery"
 )
 
 with st.sidebar:
@@ -177,9 +175,21 @@ with st.sidebar:
     st.subheader("🗺️ Fondo del mapa")
     basemap = st.radio(
         "Selecciona el fondo",
-        ["OpenStreetMap", "Bing Satellite"],
+        ["OpenStreetMap", "Bing Satellite Hybrid", "Esri World Imagery"],
         index=1,
     )
+
+    bing_key = ""
+    if basemap == "Bing Satellite Hybrid":
+        bing_key = st.text_input(
+            "Bing Maps API key",
+            value="",
+            help=(
+                "Gratuita: crea una clave en "
+                "[bingmapscreator.com](https://www.bingmapscreator.com) "
+                "(500 peticiones/mes gratis). Sin clave se usa Esri World Imagery."
+            ),
+        ).strip()
 
     st.subheader("📚 Capas")
     st.caption("Activa o desactiva las capas (todas con 50 % de opacidad)")
@@ -209,7 +219,11 @@ st.info(
 )
 
 if active_ids:
-    m = build_map(active_ids, basemap)
+    # Si elige Bing sin clave, usar Esri (la satélite que funciona sin key)
+    effective_basemap = basemap
+    if basemap == "Bing Satellite Hybrid" and not bing_key:
+        effective_basemap = "Esri World Imagery"
+    m = build_map(active_ids, effective_basemap, bing_key)
     st.dataframe(
         pd.DataFrame(
             {
