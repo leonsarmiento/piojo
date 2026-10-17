@@ -20,53 +20,76 @@ st.set_page_config(
 DATA_DIR = Path(__file__).parent / "data"
 
 # ------------------------- Capas -------------------------
-# Cada capa: color base, icono y descripción
+# Symbology por capa: outline (borde), fill (relleno, None = sin relleno),
+# dash (trazo punteado) y opacity (opacidad global de la capa)
 LAYERS = [
     {
         "id": "Limite_Piojo",
         "name": "Límite Municipal",
-        "color": "#FF0000",
+        "outline": "#000000",
+        "fill": None,
+        "dash": "2,8",
+        "opacity": 1.0,
         "icon": "🏛️",
-        "desc": "Polígono del municipio de Piojó",
+        "desc": "Polígono del municipio de Piojó (borde negro punteado, sin relleno)",
     },
     {
         "id": "Areas_de_Vida_Priorizadas",
         "name": "Áreas de Vida Priorizadas",
-        "color": "#8E44AD",
+        "outline": "#FF0000",
+        "fill": None,
+        "dash": None,
+        "opacity": 1.0,
         "icon": "🌱",
-        "desc": "Áreas de vida priorizadas de PIOJÓ",
+        "desc": "Áreas de vida priorizadas de PIOJÓ (borde rojo, sin relleno)",
     },
     {
         "id": "humedales",
         "name": "Humedales",
-        "color": "#00A8E8",
+        "outline": "#ADD8E6",
+        "fill": "#90EE90",
+        "dash": None,
+        "opacity": 0.5,
         "icon": "💧",
-        "desc": "Humedales del municipio",
+        "desc": "Humedales (relleno verde claro, borde azul claro, 50 %)",
     },
     {
         "id": "SINAP",
         "name": "SINAP (Parques Naturales)",
-        "color": "#27AE60",
+        "outline": "#FFFFFF",
+        "fill": "#006400",
+        "dash": None,
+        "opacity": 0.5,
         "icon": "🌳",
-        "desc": "Sistema Nacional de Áreas Protegidas",
+        "desc": "Sistema Nacional de Áreas Protegidas (relleno verde oscuro, borde blanco, 50 %)",
     },
     {
         "id": "Area_Zonas_Siembra",
         "name": "Zonas de Siembra",
-        "color": "#F39C12",
+        "outline": "#008000",
+        "fill": None,
+        "dash": None,
+        "opacity": 1.0,
         "icon": "🌾",
-        "desc": "Áreas de zonas de siembra",
+        "desc": "Áreas de zonas de siembra (borde verde, sin relleno)",
     },
     {
         "id": "Suceptibilidad_Erosion",
         "name": "Susceptibilidad a Erosión (ALTA y MUY ALTA)",
-        "color": "#C0392B",
+        "outline": None,  # se define por categoría de susceptibilidad
+        "fill": None,
+        "dash": None,
+        "opacity": 0.5,
         "icon": "⚠️",
-        "desc": "Polígonos con susceptibilidad ALTA o MUY ALTA a erosión",
+        "desc": "Polígonos con susceptibilidad ALTA (amarillo) o MUY ALTA (naranja), 50 %",
     },
 ]
 
-OPACITY = 0.5  # transparencia 50 % (opacidad 50 %)
+# Relleno por categoría de susceptibilidad a erosión
+EROSION_FILLS = {
+    "ALTA": "#FFD700",       # amarillo
+    "MUY ALTA": "#FF8C00",   # naranja
+}
 
 # ------------------------- Carga de datos -------------------------
 @st.cache_data
@@ -91,6 +114,20 @@ def _bbox(gj: dict):
     for feat in gj["features"]:
         walk(feat["geometry"]["coordinates"])
     return [[miny, minx], [maxy, maxx]]
+
+def _layer_style(outline: str, fill, opacity: float, dash=None):
+    """Estilo de polígono: sin relleno si fill=None."""
+    style = {
+        "color": outline,
+        "weight": 2,
+        "opacity": opacity,
+        "fill": fill is not None,
+        "fillColor": fill if fill is not None else outline,
+        "fillOpacity": opacity if fill is not None else 0,
+    }
+    if dash:
+        style["dashArray"] = dash
+    return style
 
 def build_map(active_ids: tuple, basemap: str):
     gdf_map = folium.Map(
@@ -122,16 +159,26 @@ def build_map(active_ids: tuple, basemap: str):
         if lyr["id"] not in active_ids:
             continue
         gj = load_layer(lyr["id"])
-        folium.GeoJson(
-            gj,
-            style_function=lambda _f, c=lyr["color"]: {
-                "color": c,
-                "weight": 2,
-                "fillColor": c,
-                "fillOpacity": OPACITY,
-                "opacity": OPACITY,
-            },
-        ).add_to(gdf_map)
+
+        if lyr["id"] == "Suceptibilidad_Erosion":
+            # relleno según categoría de susceptibilidad (ALTA / MUY ALTA)
+            for feat in gj["features"]:
+                prop = feat["properties"] or {}
+                cat = str(prop.get("suscep", "")).upper()
+                color = EROSION_FILLS.get(cat, "#FFD700")
+                folium.GeoJson(
+                    feat,
+                    style_function=lambda _f, c=color: _layer_style(
+                        c, c, lyr["opacity"], lyr["dash"]
+                    ),
+                ).add_to(gdf_map)
+        else:
+            folium.GeoJson(
+                gj,
+                style_function=lambda _f, l=lyr: _layer_style(
+                    l["outline"], l["fill"], l["opacity"], l["dash"]
+                ),
+            ).add_to(gdf_map)
 
     # ---------- Conservar zoom/centro al re-renderizar (localStorage) ----------
     gdf_map.get_root().html.add_child(
@@ -146,7 +193,7 @@ def build_map(active_ids: tuple, basemap: str):
                     try {{
                         var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
                         if (saved && saved.lat != null) {{
-                            mapObj.setView([saved.lat, saved.lng], saved.zoom);
+                            mapObj.setView([saved.lat, saved.lng], saved.zoom, {{ animate: false }});
                         }}
                     }} catch (e) {{}}
                     var save = function () {{
@@ -191,7 +238,7 @@ with st.sidebar:
     )
 
     st.subheader("📚 Capas")
-    st.caption("Activa o desactiva las capas (todas con 50 % de opacidad)")
+    st.caption("Activa o desactiva las capas")
     active = {}
     for lyr in LAYERS:
         active[lyr["id"]] = st.checkbox(
@@ -202,10 +249,27 @@ with st.sidebar:
 
     st.subheader("ℹ️ Leyenda")
     for lyr in LAYERS:
-        if active[lyr["id"]]:
+        if not active[lyr["id"]]:
+            continue
+        if lyr["id"] == "Suceptibilidad_Erosion":
+            for cat, c in EROSION_FILLS.items():
+                st.markdown(
+                    f"<div style='display:flex;align-items:center;gap:8px;margin-left:8px'>"
+                    f"<span style='background:{c};opacity:0.5;width:14px;height:14px;border-radius:3px;display:inline-block'></span>"
+                    f"<small>{cat}</small></div>",
+                    unsafe_allow_html=True,
+                )
             st.markdown(
                 f"<div style='display:flex;align-items:center;gap:8px'>"
-                f"<span style='background:{lyr['color']};opacity:0.5;width:16px;height:16px;border-radius:3px;display:inline-block'></span>"
+                f"{lyr['icon']} {lyr['name']}</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            swatch = lyr["fill"] or lyr["outline"]
+            op = 1 if lyr["fill"] is None else 0.5
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:8px'>"
+                f"<span style='background:{swatch};opacity:{op};width:16px;height:16px;border-radius:3px;display:inline-block;border:2px solid {lyr['outline']}'></span>"
                 f"{lyr['icon']} {lyr['name']}</div>",
                 unsafe_allow_html=True,
             )
