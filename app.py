@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import folium
-import pandas as pd
 import streamlit as st
 from streamlit.components.v1 import html as st_html
 
@@ -224,17 +223,6 @@ if active_ids:
     if basemap == "Bing Satellite Hybrid" and not bing_key:
         effective_basemap = "Esri World Imagery"
     m = build_map(active_ids, effective_basemap, bing_key)
-    st.dataframe(
-        pd.DataFrame(
-            {
-                "Capa": [l["name"] for l in LAYERS if l["id"] in active_ids],
-                "Color": [l["color"] for l in LAYERS if l["id"] in active_ids],
-                "Opacidad": ["50 %" for _ in active_ids],
-            }
-        ),
-        width="stretch",
-        hide_index=True,
-    )
     st_html(m._repr_html_(), height=750)
 else:
     st.warning("⚠️ Activa al menos una capa en el panel lateral para ver el mapa.")
