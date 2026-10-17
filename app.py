@@ -9,6 +9,7 @@ from pathlib import Path
 import folium
 import pandas as pd
 import streamlit as st
+from streamlit.components.v1 import html as st_html
 
 st.set_page_config(
     page_title="PIOJÓ · Mapa Web",
@@ -74,7 +75,6 @@ def load_layer(path: str):
     with open(DATA_DIR / f"{path}.geojson", "r", encoding="utf-8") as f:
         return json.load(f)
 
-@st.cache_data
 def build_map(active_ids: tuple, basemap: str):
     gdf_map = folium.Map(
         location=[4.14, -76.30],  # centro aproximado de Piojó
@@ -173,10 +173,10 @@ if active_ids:
                 "Opacidad": ["50 %" for _ in active_ids],
             }
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
-    st.folium(m, height=750)
+    st_html(m._repr_html_(), height=750)
 else:
     st.warning("⚠️ Activa al menos una capa en el panel lateral para ver el mapa.")
 
