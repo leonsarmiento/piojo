@@ -1,6 +1,6 @@
 """
 PIOJÓ — Mapa Web Interactivo
-Áreas de Vida del municipio de Piojó, Valle del Cauca (Colombia)
+Áreas de Vida del municipio de Piojó, Atlántico (Colombia)
 """
 
 import json
