@@ -223,7 +223,7 @@ def build_map(active_ids: tuple, basemap: str):
 # ------------------------- UI -------------------------
 st.title("🗺️ PIOJÓ — Mapa Web de Áreas de Vida")
 st.caption(
-    "Municipio de Piojó, Valle del Cauca, Colombia · "
+    "Municipio de Piojó, Atlántico, Colombia · "
     "Capas vectoriales sobre fondo OpenStreetMap o Esri World Imagery"
 )
 
